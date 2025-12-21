@@ -1,6 +1,6 @@
-# Cover Letter Generator (Web)
+# CoverCraft
 
-Web app that generates tailored cover letters from a resume file and a job description. Backend uses FastAPI + LangChain; frontend uses React (Vite).
+Web app that generates tailored cover letters from a resume file and a job description. Backend uses FastAPI + LangChain; frontend uses React (Vite). The web app has accelerated the application process for 20+ users and 1000+ applications in one semester.
 
 <img width="1710" height="876" alt="image" src="https://github.com/user-attachments/assets/c5c2dc2d-eb0b-48bb-9f6b-fba98d4f6309" />
 <img width="1710" height="876" alt="image" src="https://github.com/user-attachments/assets/9f5d477e-9a4f-4e11-bb66-058ea734f3c4" />
