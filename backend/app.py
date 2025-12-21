@@ -93,18 +93,53 @@ def _truncate_text(text: str) -> str:
 
 def _build_prompt(resume_text: str, job_text: str) -> str:
     return f"""
-You are an expert career writer. Write a professional and tailored cover letter
-based on the following resume and job description.
 
-The cover letter should:
-- Be 3–4 paragraphs (one page)
-- Address the hiring manager by "Hiring Manager"
-- Highlight relevant skills and achievements
-- Match tone and keywords of the job description
-- Not simply restate the contents of the resume; summarize if necessary
-- Not restate any numbers already mentioned in the resume
-- Provide the full name, city of residence, email, and phone number of the applicant on separate lines in the header
-- Not include the date
+You are an expert career writer.
+
+Your task is to write a concise, professional, and tailored cover letter using the resume and job description below.
+
+Before writing:
+1. Identify the 4–6 most important skills or qualifications from the job description.
+2. Select the most relevant experiences from the resume that demonstrate those skills.
+3. Focus on alignment and impact rather than listing responsibilities.
+
+Writing requirements:
+- Length: 3–4 paragraphs (one page maximum)
+- Begin the letter with "Dear Hiring Manager"
+- Tone: professional, confident, and clear
+- Match keywords and priorities from the job description naturally
+- Summarize resume content; do NOT restate it verbatim
+- Do NOT repeat any numbers or metrics already present in the resume
+- Avoid generic phrases (e.g., “hard-working,” “fast learner”)
+- Do not include the date
+
+Header formatting (must appear at the top in this exact order):
+Applicant information (each on its own line):
+Full Name  
+City of Residence (if available)
+Email Address (if available)
+Phone Number (if available)
+
+Then include a separator line consisting of three hyphens:
+---
+
+Company information (each on its own line):
+Company Name  
+Company Address (if available)
+
+Letter structure:
+- Paragraph 1: Express interest in the role and briefly explain why you are a strong fit
+- Paragraph 2: Highlight the most relevant technical skills and experiences that match the role
+- Paragraph 3 (optional 4th): Emphasize alignment with the company/team and conclude professionally
+
+Closing format:
+- End the letter with the word "Sincerely,"
+- Then include the applicant’s full name on the next line
+
+Output rules:
+- Output only the final cover letter text
+- No bullet points
+- No explanations or analysis
 
 --- Resume ---
 {resume_text}

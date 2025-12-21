@@ -157,7 +157,7 @@ export default function App() {
     <div className="page">
       <div className="card">
         <header>
-          <h1>Cover Letter Generator</h1>
+          <h1>CoverCrafter</h1>
           <p>Upload a resume, paste a job description, and generate a tailored cover letter.</p>
         </header>
 
