@@ -2,11 +2,11 @@
 
 Web app that generates tailored cover letters from a resume file and a job description. Backend uses FastAPI + LangChain; frontend uses React (Vite).
 
-Add screenshots and/or a demo video here.
+<img width="1710" height="876" alt="image" src="https://github.com/user-attachments/assets/c5c2dc2d-eb0b-48bb-9f6b-fba98d4f6309" />
+<img width="1710" height="876" alt="image" src="https://github.com/user-attachments/assets/9f5d477e-9a4f-4e11-bb66-058ea734f3c4" />
+<img width="1710" height="1062" alt="image" src="https://github.com/user-attachments/assets/9ebeafb1-27cc-439a-a25d-356efde426e7" />
 
-- Screenshot 1: `docs/images/screenshot-1.png`
-- Screenshot 2: `docs/images/screenshot-2.png`
-- Demo video: `docs/video/demo.mp4`
+
 
 ## Features
 - Upload resume (PDF/DOCX/TXT)
