@@ -11,7 +11,7 @@ services:
       - key: FRONTEND_ORIGINS
         value: https://cover-letter-frontend.onrender.com
 
-  - type: static
+  - type: static_site
     name: cover-letter-frontend
     rootDir: frontend
     buildCommand: npm install && npm run build
