@@ -1,6 +1,12 @@
 # Cover Letter Generator (Web)
 
-Simple web app that generates tailored cover letters from a resume file and a job description. Backend uses FastAPI + LangChain; frontend uses React (Vite).
+Web app that generates tailored cover letters from a resume file and a job description. Backend uses FastAPI + LangChain; frontend uses React (Vite).
+
+Add screenshots and/or a demo video here.
+
+- Screenshot 1: `docs/images/screenshot-1.png`
+- Screenshot 2: `docs/images/screenshot-2.png`
+- Demo video: `docs/video/demo.mp4`
 
 ## Features
 - Upload resume (PDF/DOCX/TXT)
@@ -57,14 +63,6 @@ Open:
   - body: `{ "coverLetter": "..." }`
 - `POST /api/export/docx` (JSON)
   - body: `{ "coverLetter": "..." }`
-
-## Media
-
-Add screenshots and/or a demo video here.
-
-- Screenshot 1: `docs/images/screenshot-1.png`
-- Screenshot 2: `docs/images/screenshot-2.png`
-- Demo video: `docs/video/demo.mp4`
 
 ## Environment Variables
 Backend:
