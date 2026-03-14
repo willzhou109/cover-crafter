@@ -1,13 +1,6 @@
-cat > .gitignore << 'EOF'
-.DS_Store
-
-venv/
-__pycache__/
+backend/.env
+backend/.venv/
+backend/__pycache__/
+frontend/node_modules/
+frontend/dist/
 *.pyc
-
-build/
-dist/
-*.spec
-
-.env
-EOF

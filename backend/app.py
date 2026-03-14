@@ -1,99 +1,44 @@
 import io
 import os
-import time
-import threading
-import logging
-from typing import Dict, List, Tuple
+from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
-from PyPDF2 import PdfReader
-import docx
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
+from utils import extract_text_from_upload
+
 load_dotenv()
 
-MAX_FILE_SIZE = 5 * 1024 * 1024
+MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024
 MAX_TEXT_CHARS = 20000
-RATE_LIMIT_COUNT = 10
-RATE_LIMIT_WINDOW_SECONDS = 60
 
 app = FastAPI()
 
-_frontend_origins_env = os.getenv("FRONTEND_ORIGINS", "")
-if _frontend_origins_env.strip():
-    FRONTEND_ORIGINS = [origin.strip() for origin in _frontend_origins_env.split(",") if origin.strip()]
-else:
-    FRONTEND_ORIGINS = ["http://localhost:5173"]
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-logger = logging.getLogger("cover_letter_api")
-
-_rate_limit_lock = threading.Lock()
-_rate_limit_hits: Dict[str, List[float]] = {}
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=FRONTEND_ORIGINS,
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["*"] ,
     allow_headers=["*"],
 )
 
 
-class CoverLetterPayload(BaseModel):
-    coverLetter: str
-
-
-def _get_extension(filename: str) -> str:
-    return os.path.splitext(filename)[1].lower()
-
-
-def _read_upload(upload: UploadFile) -> Tuple[str, bytes]:
-    if not upload.filename:
-        raise HTTPException(status_code=400, detail="Missing resume file name")
-
-    data = upload.file.read()
-    if len(data) == 0:
-        raise HTTPException(status_code=400, detail="Empty resume file")
-    if len(data) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=413, detail="Resume file exceeds 5MB limit")
-
-    return upload.filename, data
-
-
-def _extract_text(filename: str, data: bytes) -> str:
-    ext = _get_extension(filename)
-
-    if ext == ".pdf":
-        reader = PdfReader(io.BytesIO(data))
-        text = "".join(page.extract_text() or "" for page in reader.pages)
+def _truncate(text: str, limit: int = MAX_TEXT_CHARS) -> str:
+    if len(text) <= limit:
         return text
-
-    if ext == ".docx":
-        doc = docx.Document(io.BytesIO(data))
-        return "\n".join(p.text for p in doc.paragraphs)
-
-    if ext == ".txt":
-        return data.decode("utf-8", errors="ignore")
-
-    raise HTTPException(status_code=400, detail="Unsupported file type. Use PDF, DOCX, or TXT")
-
-
-def _truncate_text(text: str) -> str:
-    return text[:MAX_TEXT_CHARS]
+    return text[:limit]
 
 
 def _build_prompt(resume_text: str, job_text: str) -> str:
     return f"""
-
 You are an expert career writer.
 
 Your task is to write a concise, professional, and tailored cover letter using the resume and job description below.
@@ -146,47 +91,53 @@ Output rules:
 
 --- Job Description ---
 {job_text}
-"""
+""".strip()
 
 
-def _get_llm() -> ChatOpenAI:
-    if not os.getenv("OPENAI_API_KEY"):
-        raise HTTPException(status_code=500, detail="Missing OPENAI_API_KEY in environment")
-    return ChatOpenAI(model="gpt-4o", temperature=0.7)
+def _require_api_key() -> str:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="Missing OPENAI_API_KEY on server")
+    return api_key
 
 
-@app.middleware("http")
-async def log_and_rate_limit(request, call_next):
-    start = time.monotonic()
-    client_ip = request.client.host if request.client else "unknown"
-    response = None
+class ExportRequest(BaseModel):
+    coverLetter: str
 
-    if request.url.path == "/api/generate":
-        now = time.monotonic()
-        with _rate_limit_lock:
-            hits = _rate_limit_hits.setdefault(client_ip, [])
-            hits[:] = [ts for ts in hits if now - ts < RATE_LIMIT_WINDOW_SECONDS]
-            if len(hits) >= RATE_LIMIT_COUNT:
-                logger.warning("rate_limit block ip=%s path=%s", client_ip, request.url.path)
-                raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
-            hits.append(now)
 
-    try:
-        response = await call_next(request)
-    except HTTPException:
-        raise
-    finally:
-        duration_ms = (time.monotonic() - start) * 1000
-        status_code = getattr(response, "status_code", 500)
-        logger.info(
-            "request ip=%s method=%s path=%s status=%s duration_ms=%.1f",
-            client_ip,
-            request.method,
-            request.url.path,
-            status_code,
-            duration_ms,
-        )
-    return response
+def _split_header_and_body(text: str):
+    lines = text.splitlines()
+    header_lines = []
+    body_start_idx = 0
+
+    for i, line in enumerate(lines):
+        if line.strip() == "Dear Hiring Manager,":
+            header_lines = lines[:i]
+            body_start_idx = i
+            break
+        if line.strip() == "":
+            header_lines = lines[:i]
+            body_start_idx = i + 1
+            break
+    else:
+        header_lines = []
+        body_start_idx = 0
+
+    body_text = "\n".join(lines[body_start_idx:]).strip()
+    body_paragraphs = [p.strip() for p in body_text.split("\n\n") if p.strip()]
+    header_lines = [h.strip() for h in header_lines if h.strip()]
+    return header_lines, body_paragraphs
+
+
+def _normalize_sincerely_spacing(paragraphs):
+    normalized = []
+    for para in paragraphs:
+        if para.strip() == "Sincerely,":
+            normalized.append(para.strip())
+            normalized.append("")
+        else:
+            normalized.append(para)
+    return normalized
 
 
 @app.post("/api/generate")
@@ -194,53 +145,46 @@ async def generate_cover_letter(
     resume: UploadFile = File(...),
     jobText: str = Form(...),
 ):
-    if not jobText.strip():
+    if not resume:
+        raise HTTPException(status_code=400, detail="Missing resume file")
+
+    job_text = jobText.strip()
+    if not job_text:
         raise HTTPException(status_code=400, detail="Missing job description")
 
-    filename, data = _read_upload(resume)
-    extracted = _extract_text(filename, data)
-    if not extracted.strip():
-        raise HTTPException(status_code=400, detail="Failed to extract resume text")
-
-    resume_text = _truncate_text(extracted)
-    job_text = _truncate_text(jobText.strip())
-
-    prompt = _build_prompt(resume_text, job_text)
-    llm = _get_llm()
+    content = await resume.read()
+    if len(content) > MAX_FILE_SIZE_BYTES:
+        raise HTTPException(status_code=413, detail="Resume file too large (max 5MB)")
 
     try:
+        resume_text = extract_text_from_upload(resume.filename or "", content)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to extract resume text: {exc}") from exc
+
+    resume_text = _truncate(resume_text)
+    job_text = _truncate(job_text)
+
+    if not resume_text.strip():
+        raise HTTPException(status_code=400, detail="Resume text is empty or unreadable")
+
+    _require_api_key()
+
+    prompt = _build_prompt(resume_text, job_text)
+
+    try:
+        llm = ChatOpenAI(model="gpt-4o", temperature=0.7)
         response = llm.invoke(prompt)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"OpenAI error: {exc}") from exc
+        raise HTTPException(status_code=500, detail=f"OpenAI error: {exc}") from exc
 
-    return {"coverLetter": response.content}
-
-
-@app.post("/api/export/docx")
-async def export_docx(payload: CoverLetterPayload):
-    text = payload.coverLetter.strip()
-    if not text:
-        raise HTTPException(status_code=400, detail="Missing cover letter text")
-
-    doc = docx.Document()
-    for para in text.split("\n\n"):
-        doc.add_paragraph(para.strip())
-
-    buffer = io.BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-
-    headers = {"Content-Disposition": "attachment; filename=cover_letter.docx"}
-    return StreamingResponse(
-        buffer,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers=headers,
-    )
+    return JSONResponse({"coverLetter": response.content.strip()})
 
 
 @app.post("/api/export/pdf")
-async def export_pdf(payload: CoverLetterPayload):
-    text = payload.coverLetter.strip()
+async def export_pdf(payload: ExportRequest):
+    text = (payload.coverLetter or "").strip()
     if not text:
         raise HTTPException(status_code=400, detail="Missing cover letter text")
 
@@ -256,15 +200,27 @@ async def export_pdf(payload: CoverLetterPayload):
 
     styles = getSampleStyleSheet()
     story = []
+    header_lines, body_paragraphs = _split_header_and_body(text)
+    body_paragraphs = _normalize_sincerely_spacing(body_paragraphs)
 
-    paragraphs = text.split("\n\n")
-    for para in paragraphs:
-        cleaned = para.strip().replace("\n", "<br/>")
-        story.append(Paragraph(cleaned, styles["Normal"]))
+    for line in header_lines:
+        story.append(Paragraph(line, styles["Normal"]))
+
+    if header_lines:
+        story.append(Spacer(1, 0.3 * inch))
+
+    for para in body_paragraphs:
+        if not para:
+            story.append(Spacer(1, 0.2 * inch))
+            continue
+        pdf_para = para.replace("\n", "<br/>")
+        story.append(Paragraph(pdf_para, styles["Normal"]))
         story.append(Spacer(1, 0.2 * inch))
 
     doc.build(story)
     buffer.seek(0)
 
-    headers = {"Content-Disposition": "attachment; filename=cover_letter.pdf"}
+    headers = {
+        "Content-Disposition": "attachment; filename=cover_letter.pdf"
+    }
     return StreamingResponse(buffer, media_type="application/pdf", headers=headers)
